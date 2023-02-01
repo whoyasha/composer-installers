@@ -25,99 +25,107 @@ use Composer\Util\Filesystem;
  */
 class BitrixInstaller extends BaseInstaller
 {
-    /** @var array<string, string> */
-    protected $locations = array(
-        'module'    => '{$bitrix_dir}/modules/{$name}/',    // deprecated, remove on the major release (Backward compatibility will be broken)
-        'component' => '{$bitrix_dir}/components/{$name}/', // deprecated, remove on the major release (Backward compatibility will be broken)
-        'theme'     => '{$bitrix_dir}/templates/{$name}/',  // deprecated, remove on the major release (Backward compatibility will be broken)
-        'd7-module'    => '{$bitrix_dir}/modules/{$vendor}.{$name}/',
-        'd7-component' => '{$bitrix_dir}/components/{$vendor}/{$name}/',
-        'd7-template'     => '{$bitrix_dir}/templates/{$vendor}_{$name}/',
-    );
+	/** @var array<string, string> */
+	protected $locations = array(
+		'module'    => '{$bitrix_dir}/modules/{$name}/',    // deprecated, remove on the major release (Backward compatibility will be broken)
+		'component' => '{$bitrix_dir}/components/{$name}/', // deprecated, remove on the major release (Backward compatibility will be broken)
+		'theme'     => '{$bitrix_dir}/templates/{$name}/',  // deprecated, remove on the major release (Backward compatibility will be broken)
+		'd7-module'    => '{$bitrix_dir}/modules/{$vendor}.{$name}/',
+		'd7-component' => '{$bitrix_dir}/components/{$vendor}/{$name}/',
+		'd7-template'     => '{$bitrix_dir}/templates/{$vendor}_{$name}/',
+	);
 
-    /**
-     * @var string[] Storage for informations about duplicates at all the time of installation packages.
-     */
-    private static $checkedDuplicates = array();
+	/**
+	 * @var string[] Storage for informations about duplicates at all the time of installation packages.
+	 */
+	private static $checkedDuplicates = array();
 
-    public function inflectPackageVars(array $vars): array
-    {
-        /** @phpstan-ignore-next-line */
-        if ($this->composer->getPackage()) {
-            $extra = $this->composer->getPackage()->getExtra();
+	public function inflectPackageVars(array $vars): array
+	{
+		/** @phpstan-ignore-next-line */
+		if ($this->composer->getPackage()) {
+			$extra = $this->composer->getPackage()->getExtra();
 
-            if (isset($extra['bitrix-dir'])) {
-                $vars['bitrix_dir'] = $extra['bitrix-dir'];
-            }
-        }
+			if (isset($extra['bitrix-dir'])) {
+				$vars['bitrix_dir'] = $extra['bitrix-dir'];
+			}
+			if (isset($extra['installer-vendor'])) {
+				$vars['vendor'] = $extra['installer-vendor'];
+			}
+			if (isset($extra['installer-name'])) {
+				$vars['name'] = $extra['installer-name'];
+			}
+		}
 
-        if (!isset($vars['bitrix_dir'])) {
-            $vars['bitrix_dir'] = 'bitrix';
-        }
+		if (!isset($vars['bitrix_dir'])) {
+			$vars['bitrix_dir'] = 'bitrix';
+		}
 
-        return parent::inflectPackageVars($vars);
-    }
+		return parent::inflectPackageVars($vars);
+	}
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function templatePath(string $path, array $vars = array()): string
-    {
-        $templatePath = parent::templatePath($path, $vars);
-        $this->checkDuplicates($templatePath, $vars);
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function templatePath(string $path, array $vars = array()): string
+	{
+		$templatePath = parent::templatePath($path, $vars);
+		$this->checkDuplicates($templatePath, $vars);
 
-        return $templatePath;
-    }
+		return $templatePath;
+	}
 
-    /**
-     * Duplicates search packages.
-     *
-     * @param array<string, string> $vars
-     */
-    protected function checkDuplicates(string $path, array $vars = array()): void
-    {
-        $packageType = substr($vars['type'], strlen('bitrix') + 1);
-        $localDir = explode('/', $vars['bitrix_dir']);
-        array_pop($localDir);
-        $localDir[] = 'local';
-        $localDir = implode('/', $localDir);
+	/**
+	 * Duplicates search packages.
+	 *
+	 * @param array<string, string> $vars
+	 */
+	protected function checkDuplicates(string $path, array $vars = array()): void
+	{
+		$packageType = substr($vars['type'], strlen('bitrix') + 1);
+		$localDir = explode('/', $vars['bitrix_dir']);
+		array_pop($localDir);
+		$localDir[] = 'local';
+		$localDir = implode('/', $localDir);
 
-        $oldPath = str_replace(
-            array('{$bitrix_dir}', '{$name}'),
-            array($localDir, $vars['name']),
-            $this->locations[$packageType]
-        );
+		$oldPath = str_replace(
+			array('{$bitrix_dir}', '{$vendor}', '{$name}'),
+			array($localDir, $vars['vendor'], $vars['name']),
+			$this->locations[$packageType]
+		);
+		
+		file_put_contents("/home/bitrix/composer.txt", $oldPath);
 
-        if (in_array($oldPath, static::$checkedDuplicates)) {
-            return;
-        }
+		if (in_array($oldPath, static::$checkedDuplicates)) {
+			return;
+		}
 
-        if ($oldPath !== $path && file_exists($oldPath) && $this->io->isInteractive()) {
-            $this->io->writeError('    <error>Duplication of packages:</error>');
-            $this->io->writeError('    <info>Package ' . $oldPath . ' will be called instead package ' . $path . '</info>');
+		if ($oldPath !== $path && file_exists($oldPath) && $this->io->isInteractive()) {
+			$this->io->writeError('    <error>Duplication of packages:</error>');
+			$this->io->writeError('    <info>Package ' . $oldPath . ' will be called instead package ' . $path . '</info>');
 
-            while (true) {
-                switch ($this->io->ask('    <info>Delete ' . $oldPath . ' [y,n,?]?</info> ', '?')) {
-                    case 'y':
-                        $fs = new Filesystem();
-                        $fs->removeDirectory($oldPath);
-                        break 2;
+			while (true) {
+				switch ($this->io->ask('    <info>Delete ' . $oldPath . ' [y,n,?]?</info> ', '?')) {
+					case 'y':
+						$fs = new Filesystem();
+						$fs->removeDirectory($oldPath);
+						break 2;
 
-                    case 'n':
-                        break 2;
+					case 'n':
+						break 2;
 
-                    case '?':
-                    default:
-                        $this->io->writeError(array(
-                            '    y - delete package ' . $oldPath . ' and to continue with the installation',
-                            '    n - don\'t delete and to continue with the installation',
-                        ));
-                        $this->io->writeError('    ? - print help');
-                        break;
-                }
-            }
-        }
+					case '?':
+					default:
+						$this->io->writeError(array(
+							'    y - delete package ' . $oldPath . ' and to continue with the installation',
+							'    n - don\'t delete and to continue with the installation',
+						));
+						$this->io->writeError('    ? - print help');
+						break;
+				}
+			}
+		}
 
-        static::$checkedDuplicates[] = $oldPath;
-    }
+		static::$checkedDuplicates[] = $oldPath;
+	}
 }
