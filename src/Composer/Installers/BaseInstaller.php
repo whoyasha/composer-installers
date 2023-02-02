@@ -134,4 +134,21 @@ abstract class BaseInstaller
 
         return $result;
     }
+    
+    public function getModuleSettings() {
+        
+        if ($this->composer->getPackage()) {
+            
+            $extra = $this->composer->getPackage()->getExtra();
+        
+            if (isset($extra['installer-name'])) {
+                foreach ( $extra['installer-name'] as $module ) {
+                    if ( $module["current"] ) {
+                        unset($module["name"]);
+                        return $module;
+                    }
+                }
+            }
+        }
+    }
 }

@@ -4,6 +4,11 @@ namespace Composer\Installers;
 
 use Composer\Util\Filesystem;
 
+use Composer\Installer\LibraryInstaller;
+use Composer\Package\PackageInterface;
+use Composer\Repository\InstalledRepositoryInterface;
+use React\Promise\PromiseInterface;
+
 /**
  * Installer for Bitrix Framework. Supported types of extensions:
  * - `bitrix-d7-module` — copy the module to directory `bitrix/modules/<vendor>.<name>`.
@@ -25,12 +30,14 @@ use Composer\Util\Filesystem;
  */
 class BitrixInstaller extends BaseInstaller
 {
+	protected $module_settings = [];
+	
 	/** @var array<string, string> */
 	protected $locations = array(
 		'module'    => '{$bitrix_dir}/modules/{$name}/',    // deprecated, remove on the major release (Backward compatibility will be broken)
 		'component' => '{$bitrix_dir}/components/{$name}/', // deprecated, remove on the major release (Backward compatibility will be broken)
 		'theme'     => '{$bitrix_dir}/templates/{$name}/',  // deprecated, remove on the major release (Backward compatibility will be broken)
-		'd7-module'    => '{$bitrix_dir}/modules/{$vendor}.{$name}/',
+		'd7-module'    => '{$bitrix_dir}/modules/{$vendor}_{$name}/',
 		'd7-component' => '{$bitrix_dir}/components/{$vendor}/{$name}/',
 		'd7-template'     => '{$bitrix_dir}/templates/{$vendor}_{$name}/',
 	);
@@ -52,8 +59,20 @@ class BitrixInstaller extends BaseInstaller
 			if (isset($extra['installer-vendor'])) {
 				$vars['vendor'] = $extra['installer-vendor'];
 			}
+			
+		//  не удаляет предпоследний и раннее модули
 			if (isset($extra['installer-name'])) {
-				$vars['name'] = $extra['installer-name'];
+				$vars['name'] = NULL;
+				foreach ( $extra['installer-name'] as $module ) {
+					if ( $module["current"] ) {
+						$vars['name'] = $module["name"];
+						break;
+					}
+				}
+				
+				if ( is_null($vars['name']) ) {
+					throw new \Exception('Current item not defined');
+				}
 			}
 		}
 
@@ -93,8 +112,6 @@ class BitrixInstaller extends BaseInstaller
 			array($localDir, $vars['vendor'], $vars['name']),
 			$this->locations[$packageType]
 		);
-		
-		file_put_contents("/home/bitrix/composer.txt", $oldPath);
 
 		if (in_array($oldPath, static::$checkedDuplicates)) {
 			return;
@@ -128,4 +145,5 @@ class BitrixInstaller extends BaseInstaller
 
 		static::$checkedDuplicates[] = $oldPath;
 	}
+	
 }

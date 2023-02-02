@@ -14,105 +14,17 @@ use React\Promise\PromiseInterface;
 
 class Installer extends LibraryInstaller
 {
+    protected $path;
+    protected $frameworkType;
+    protected $module_settings;
+    
     /**
      * Package types to installer class map
      *
      * @var array<string, string>
      */
     private $supportedTypes = array(
-        'akaunting'    => 'AkauntingInstaller',
-        'asgard'       => 'AsgardInstaller',
-        'attogram'     => 'AttogramInstaller',
-        'agl'          => 'AglInstaller',
-        'annotatecms'  => 'AnnotateCmsInstaller',
         'bitrix'       => 'BitrixInstaller',
-        'bonefish'     => 'BonefishInstaller',
-        'cakephp'      => 'CakePHPInstaller',
-        'chef'         => 'ChefInstaller',
-        'civicrm'      => 'CiviCrmInstaller',
-        'ccframework'  => 'ClanCatsFrameworkInstaller',
-        'cockpit'      => 'CockpitInstaller',
-        'codeigniter'  => 'CodeIgniterInstaller',
-        'concrete5'    => 'Concrete5Installer',
-        'croogo'       => 'CroogoInstaller',
-        'dframe'       => 'DframeInstaller',
-        'dokuwiki'     => 'DokuWikiInstaller',
-        'dolibarr'     => 'DolibarrInstaller',
-        'decibel'      => 'DecibelInstaller',
-        'drupal'       => 'DrupalInstaller',
-        'elgg'         => 'ElggInstaller',
-        'eliasis'      => 'EliasisInstaller',
-        'ee3'          => 'ExpressionEngineInstaller',
-        'ee2'          => 'ExpressionEngineInstaller',
-        'ezplatform'   => 'EzPlatformInstaller',
-        'fuel'         => 'FuelInstaller',
-        'fuelphp'      => 'FuelphpInstaller',
-        'grav'         => 'GravInstaller',
-        'hurad'        => 'HuradInstaller',
-        'tastyigniter' => 'TastyIgniterInstaller',
-        'imagecms'     => 'ImageCMSInstaller',
-        'itop'         => 'ItopInstaller',
-        'kanboard'     => 'KanboardInstaller',
-        'known'	       => 'KnownInstaller',
-        'kodicms'      => 'KodiCMSInstaller',
-        'kohana'       => 'KohanaInstaller',
-        'lms'          => 'LanManagementSystemInstaller',
-        'laravel'      => 'LaravelInstaller',
-        'lavalite'     => 'LavaLiteInstaller',
-        'lithium'      => 'LithiumInstaller',
-        'magento'      => 'MagentoInstaller',
-        'majima'       => 'MajimaInstaller',
-        'mantisbt'     => 'MantisBTInstaller',
-        'mako'         => 'MakoInstaller',
-        'matomo'       => 'MatomoInstaller',
-        'maya'         => 'MayaInstaller',
-        'mautic'       => 'MauticInstaller',
-        'mediawiki'    => 'MediaWikiInstaller',
-        'miaoxing'     => 'MiaoxingInstaller',
-        'microweber'   => 'MicroweberInstaller',
-        'modulework'   => 'MODULEWorkInstaller',
-        'modx'         => 'ModxInstaller',
-        'modxevo'      => 'MODXEvoInstaller',
-        'moodle'       => 'MoodleInstaller',
-        'october'      => 'OctoberInstaller',
-        'ontowiki'     => 'OntoWikiInstaller',
-        'oxid'         => 'OxidInstaller',
-        'osclass'      => 'OsclassInstaller',
-        'pxcms'        => 'PxcmsInstaller',
-        'phpbb'        => 'PhpBBInstaller',
-        'piwik'        => 'PiwikInstaller',
-        'plentymarkets'=> 'PlentymarketsInstaller',
-        'ppi'          => 'PPIInstaller',
-        'puppet'       => 'PuppetInstaller',
-        'radphp'       => 'RadPHPInstaller',
-        'phifty'       => 'PhiftyInstaller',
-        'porto'        => 'PortoInstaller',
-        'processwire'  => 'ProcessWireInstaller',
-        'quicksilver'  => 'PantheonInstaller',
-        'redaxo'       => 'RedaxoInstaller',
-        'redaxo5'      => 'Redaxo5Installer',
-        'reindex'      => 'ReIndexInstaller',
-        'roundcube'    => 'RoundcubeInstaller',
-        'shopware'     => 'ShopwareInstaller',
-        'sitedirect'   => 'SiteDirectInstaller',
-        'silverstripe' => 'SilverStripeInstaller',
-        'smf'          => 'SMFInstaller',
-        'starbug'      => 'StarbugInstaller',
-        'sydes'        => 'SyDESInstaller',
-        'sylius'       => 'SyliusInstaller',
-        'tao'          => 'TaoInstaller',
-        'thelia'       => 'TheliaInstaller',
-        'tusk'         => 'TuskInstaller',
-        'userfrosting' => 'UserFrostingInstaller',
-        'vanilla'      => 'VanillaInstaller',
-        'whmcs'        => 'WHMCSInstaller',
-        'winter'       => 'WinterInstaller',
-        'wolfcms'      => 'WolfCMSInstaller',
-        'wordpress'    => 'WordPressInstaller',
-        'yawik'        => 'YawikInstaller',
-        'zend'         => 'ZendInstaller',
-        'zikula'       => 'ZikulaInstaller',
-        'prestashop'   => 'PrestashopInstaller'
     );
 
     /**
@@ -143,16 +55,89 @@ class Installer extends LibraryInstaller
                 'Sorry the package type of this package is not yet supported.'
             );
         }
+        
+        $this->frameworkType = $frameworkType;
 
         $class = 'Composer\\Installers\\' . $this->supportedTypes[$frameworkType];
         $installer = new $class($package, $this->composer, $this->getIO());
 
         $path = $installer->getInstallPath($package, $frameworkType);
+        $this->path = $path;
+        
         if (!$this->filesystem->isAbsolutePath($path)) {
             $path = getcwd() . '/' . $path;
         }
 
         return $path;
+    }
+    
+//     public function install(InstalledRepositoryInterface $repo, PackageInterface $package)
+//     {
+//     
+//         $promise = parent::install($repo, $package);
+//             
+//         if ( $this->frameworkType == "bitrix" ) {
+//             
+//             $callback = function () use ($repo, $package) {
+//                 
+//                 $bitrix_dir = preg_match("/(local)/", $this->path) ? "local" : "bitrix";
+//                 $document_root = realpath(explode("/" . $bitrix_dir . "/", $this->path)[0]);
+//                 
+//                 $module_id = str_replace(["modules", "/"], "", explode("/" . $bitrix_dir, $this->path)[1]);
+//                 $module_path = $document_root . "/" . $bitrix_dir . "/modules/" . $module_id . "/install/settings.php";
+// 
+//                 if ( file_exists($module_path) ) {
+//                     $this->initBitrix($document_root);
+//                     
+//                     $debug = [
+//                         "id" => $module_id,
+//                         "path" => $module_path
+//                     ];
+//                     $test = false;
+//                     if ( $test ) {
+//                         
+//                     }
+//                     // \Bitrix\Main\Diag\Debug::writeToFile($debug, date('dmY H:i:s')."  ", "__Installer.php__log.txt");
+//                     if (!\CModule::IncludeModule($module_id)) {
+//                         $module = $this->getModule($package, $module_path, $module_id);
+//                         $module->DoInstall();
+//                         die();
+//                     }
+//                 } else {
+//                     throw new \Exception('Module path not defined');
+//                 }
+//             };
+//             
+//             // Composer v2 might return a promise here
+//             if ($promise instanceof PromiseInterface) {
+//                 $promise->then($callback);
+//                 return true;
+//             }
+//             
+//             $callback();
+//         }
+//     }
+    
+    protected function initBitrix($document_root)
+    {
+        $_SERVER['DOCUMENT_ROOT'] = $document_root;
+        define('STOP_STATISTICS', true);
+        define("NO_KEEP_STATISTIC", "Y");
+        define("NO_AGENT_STATISTIC", "Y");
+        define("NOT_CHECK_PERMISSIONS", true);
+        require_once($_SERVER['DOCUMENT_ROOT'].'/bitrix/modules/main/include/prolog_before.php');
+        $GLOBALS['APPLICATION']->RestartBuffer();
+    }
+    
+    protected function getModule(PackageInterface $package, $module_path, $module_id)
+    {
+        require_once $module_path;
+        $class = $module_id;
+        if (!class_exists($class)) {
+            throw new \Exception("Class $class does not exist");
+        }
+        $module = new $class();
+        return $module;
     }
 
     public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package)
