@@ -2,148 +2,243 @@
 
 namespace Composer\Installers;
 
-use Composer\Util\Filesystem;
-
+use Composer\Composer;
+use Composer\Installer\BinaryInstaller;
 use Composer\Installer\LibraryInstaller;
+use Composer\IO\IOInterface;
+use Composer\Package\Package;
 use Composer\Package\PackageInterface;
 use Composer\Repository\InstalledRepositoryInterface;
+use Composer\Util\Filesystem;
 use React\Promise\PromiseInterface;
 
-/**
- * Installer for Bitrix Framework. Supported types of extensions:
- * - `bitrix-d7-module` — copy the module to directory `bitrix/modules/<vendor>.<name>`.
- * - `bitrix-d7-component` — copy the component to directory `bitrix/components/<vendor>/<name>`.
- * - `bitrix-d7-template` — copy the template to directory `bitrix/templates/<vendor>_<name>`.
- *
- * You can set custom path to directory with Bitrix kernel in `composer.json`:
- *
- * ```json
- * {
- *      "extra": {
- *          "bitrix-dir": "s1/bitrix"
- *      }
- * }
- * ```
- *
- * @author Nik Samokhvalov <nik@samokhvalov.info>
- * @author Denis Kulichkin <onexhovia@gmail.com>
- */
-class BitrixInstaller extends BaseInstaller
+class Installer extends LibraryInstaller
 {
-	protected $module_settings = [];
-	
-	/** @var array<string, string> */
-	protected $locations = array(
-		'module'    => '{$bitrix_dir}/modules/{$name}/',    // deprecated, remove on the major release (Backward compatibility will be broken)
-		'component' => '{$bitrix_dir}/components/{$name}/', // deprecated, remove on the major release (Backward compatibility will be broken)
-		'theme'     => '{$bitrix_dir}/templates/{$name}/',  // deprecated, remove on the major release (Backward compatibility will be broken)
-		'd7-module'    => '{$bitrix_dir}/modules/{$vendor}_{$name}/',
-		'd7-component' => '{$bitrix_dir}/components/{$vendor}/{$name}/',
-		'd7-template'     => '{$bitrix_dir}/templates/{$vendor}_{$name}/',
-	);
+    protected $path;
+    protected $frameworkType;
+    protected $module_settings;
+    
+    /**
+     * Package types to installer class map
+     *
+     * @var array<string, string>
+     */
+    private $supportedTypes = array(
+        'bitrix'       => 'BitrixInstaller',
+    );
 
-	/**
-	 * @var string[] Storage for informations about duplicates at all the time of installation packages.
-	 */
-	private static $checkedDuplicates = array();
+    /**
+     * Disables installers specified in main composer extra installer-disable
+     * list
+     */
+    public function __construct(
+        IOInterface $io,
+        Composer $composer,
+        string $type = 'library',
+        ?Filesystem $filesystem = null,
+        ?BinaryInstaller $binaryInstaller = null
+    ) {
+        parent::__construct($io, $composer, $type, $filesystem, $binaryInstaller);
+        $this->removeDisabledInstallers();
+    }
 
-	public function inflectPackageVars(array $vars): array
-	{
-		/** @phpstan-ignore-next-line */
-		if ($this->composer->getPackage()) {
-			$extra = $this->composer->getPackage()->getExtra();
+    /**
+     * {@inheritDoc}
+     */
+    public function getInstallPath(PackageInterface $package)
+    {
+        $type = $package->getType();
+        $frameworkType = $this->findFrameworkType($type);
 
-			if (isset($extra['bitrix-dir'])) {
-				$vars['bitrix_dir'] = $extra['bitrix-dir'];
-			}
-			if (isset($extra['installer-vendor'])) {
-				$vars['vendor'] = $extra['installer-vendor'];
-			}
-			
-		//  не удаляет предпоследний и раннее модули
-			if (isset($extra['installer-name'])) {
-				$vars['name'] = NULL;
-				foreach ( $extra['installer-name'] as $module ) {
-					if ( $module["current"] ) {
-						$vars['name'] = $module["name"];
-						break;
-					}
-				}
-				
-				if ( is_null($vars['name']) ) {
-					throw new \Exception('Current item not defined');
-				}
-			}
-		}
+        if ($frameworkType === false) {
+            throw new \InvalidArgumentException(
+                'Sorry the package type of this package is not yet supported.'
+            );
+        }
+        
+        $this->frameworkType = $frameworkType;
 
-		if (!isset($vars['bitrix_dir'])) {
-			$vars['bitrix_dir'] = 'bitrix';
-		}
+        $class = 'Composer\\Installers\\' . $this->supportedTypes[$frameworkType];
+        $installer = new $class($package, $this->composer, $this->getIO());
 
-		return parent::inflectPackageVars($vars);
-	}
+        $path = $installer->getInstallPath($package, $frameworkType);
+        $this->path = $path;
+        
+        if (!$this->filesystem->isAbsolutePath($path)) {
+            $path = getcwd() . '/' . $path;
+        }
 
-	/**
-	 * {@inheritdoc}
-	 */
-	protected function templatePath(string $path, array $vars = array()): string
-	{
-		$templatePath = parent::templatePath($path, $vars);
-		$this->checkDuplicates($templatePath, $vars);
+        return $path;
+    }
+    
+    public function install(InstalledRepositoryInterface $repo, PackageInterface $package)
+    {
+    
+        $promise = parent::install($repo, $package);
+            
+        if ( $this->frameworkType == "bitrix" ) {
+            
+            $callback = function () use ($repo, $package) {
+                
+                $bitrix_dir = preg_match("/(local)/", $this->path) ? "local" : "bitrix";
+                $document_root = realpath(explode("/" . $bitrix_dir . "/", $this->path)[0]);
+                
+                $module_id = str_replace(["modules", "/"], "", explode("/" . $bitrix_dir, $this->path)[1]);
+                $module_path = $document_root . "/" . $bitrix_dir . "/modules/" . $module_id;
+                $install_path = $module_path . "/install/settings.php"
 
-		return $templatePath;
-	}
+                if ( file_exists($module_path) ) {
+                    // $this->initBitrix($document_root);
+                    
+                    $git = $module_path . "/.git";
+                    $cjson = $module_path . "/composer.json";
+                    
+                    $this->removeDir($git);
+                    unlink($cjson);
+                } else {
+                    throw new \Exception('Module path not defined');
+                }
+            };
+            
+            // Composer v2 might return a promise here
+            if ($promise instanceof PromiseInterface) {
+                return $promise->then($callback);
+            }
+            
+            $callback();
+        }
+    }
+    
+    protected function removeDir($dir)
+    {
+        if ($objs = glob($dir . '/*')) {
+            foreach($objs as $obj) {
+                is_dir($obj) ? $this->removeDir($obj) : unlink($obj);
+            }
+        }
+        rmdir($dir);
+    }
 
-	/**
-	 * Duplicates search packages.
-	 *
-	 * @param array<string, string> $vars
-	 */
-	protected function checkDuplicates(string $path, array $vars = array()): void
-	{
-		$packageType = substr($vars['type'], strlen('bitrix') + 1);
-		$localDir = explode('/', $vars['bitrix_dir']);
-		array_pop($localDir);
-		$localDir[] = 'local';
-		$localDir = implode('/', $localDir);
+    public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package)
+    {
+        $installPath = $this->getPackageBasePath($package);
+        $io = $this->io;
+        $outputStatus = function () use ($io, $installPath) {
+            $io->write(sprintf('Deleting %s - %s', $installPath, !file_exists($installPath) ? '<comment>deleted</comment>' : '<error>not deleted</error>'));
+        };
 
-		$oldPath = str_replace(
-			array('{$bitrix_dir}', '{$vendor}', '{$name}'),
-			array($localDir, $vars['vendor'], $vars['name']),
-			$this->locations[$packageType]
-		);
+        $promise = parent::uninstall($repo, $package);
 
-		if (in_array($oldPath, static::$checkedDuplicates)) {
-			return;
-		}
+        // Composer v2 might return a promise here
+        if ($promise instanceof PromiseInterface) {
+            return $promise->then($outputStatus);
+        }
 
-		if ($oldPath !== $path && file_exists($oldPath) && $this->io->isInteractive()) {
-			$this->io->writeError('    <error>Duplication of packages:</error>');
-			$this->io->writeError('    <info>Package ' . $oldPath . ' will be called instead package ' . $path . '</info>');
+        // If not, execute the code right away as parent::uninstall executed synchronously (composer v1, or v2 without async)
+        $outputStatus();
 
-			while (true) {
-				switch ($this->io->ask('    <info>Delete ' . $oldPath . ' [y,n,?]?</info> ', '?')) {
-					case 'y':
-						$fs = new Filesystem();
-						$fs->removeDirectory($oldPath);
-						break 2;
+        return null;
+    }
 
-					case 'n':
-						break 2;
+    /**
+     * {@inheritDoc}
+     */
+    public function supports($packageType)
+    {
+        $frameworkType = $this->findFrameworkType($packageType);
 
-					case '?':
-					default:
-						$this->io->writeError(array(
-							'    y - delete package ' . $oldPath . ' and to continue with the installation',
-							'    n - don\'t delete and to continue with the installation',
-						));
-						$this->io->writeError('    ? - print help');
-						break;
-				}
-			}
-		}
+        if ($frameworkType === false) {
+            return false;
+        }
 
-		static::$checkedDuplicates[] = $oldPath;
-	}
-	
+        $locationPattern = $this->getLocationPattern($frameworkType);
+
+        return preg_match('#' . $frameworkType . '-' . $locationPattern . '#', $packageType, $matches) === 1;
+    }
+
+    /**
+     * Finds a supported framework type if it exists and returns it
+     *
+     * @return string|false
+     */
+    protected function findFrameworkType(string $type)
+    {
+        krsort($this->supportedTypes);
+
+        foreach ($this->supportedTypes as $key => $val) {
+            if ($key === substr($type, 0, strlen($key))) {
+                return substr($type, 0, strlen($key));
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the second part of the regular expression to check for support of a
+     * package type
+     */
+    protected function getLocationPattern(string $frameworkType): string
+    {
+        $pattern = null;
+        if (!empty($this->supportedTypes[$frameworkType])) {
+            $frameworkClass = 'Composer\\Installers\\' . $this->supportedTypes[$frameworkType];
+            /** @var BaseInstaller $framework */
+            $framework = new $frameworkClass(new Package('dummy/pkg', '1.0.0.0', '1.0.0'), $this->composer, $this->getIO());
+            $locations = array_keys($framework->getLocations($frameworkType));
+            if ($locations) {
+                $pattern = '(' . implode('|', $locations) . ')';
+            }
+        }
+
+        return $pattern ?: '(\w+)';
+    }
+
+    private function getIO(): IOInterface
+    {
+        return $this->io;
+    }
+
+    /**
+     * Look for installers set to be disabled in composer's extra config and
+     * remove them from the list of supported installers.
+     *
+     * Globals:
+     *  - true, "all", and "*" - disable all installers.
+     *  - false - enable all installers (useful with
+     *     wikimedia/composer-merge-plugin or similar)
+     */
+    protected function removeDisabledInstallers(): void
+    {
+        $extra = $this->composer->getPackage()->getExtra();
+
+        if (!isset($extra['installer-disable']) || $extra['installer-disable'] === false) {
+            // No installers are disabled
+            return;
+        }
+
+        // Get installers to disable
+        $disable = $extra['installer-disable'];
+
+        // Ensure $disabled is an array
+        if (!is_array($disable)) {
+            $disable = array($disable);
+        }
+
+        // Check which installers should be disabled
+        $all = array(true, "all", "*");
+        $intersect = array_intersect($all, $disable);
+        if (!empty($intersect)) {
+            // Disable all installers
+            $this->supportedTypes = array();
+            return;
+        }
+
+        // Disable specified installers
+        foreach ($disable as $key => $installer) {
+            if (is_string($installer) && key_exists($installer, $this->supportedTypes)) {
+                unset($this->supportedTypes[$installer]);
+            }
+        }
+    }
 }
