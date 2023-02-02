@@ -71,73 +71,52 @@ class Installer extends LibraryInstaller
         return $path;
     }
     
-//     public function install(InstalledRepositoryInterface $repo, PackageInterface $package)
-//     {
-//     
-//         $promise = parent::install($repo, $package);
-//             
-//         if ( $this->frameworkType == "bitrix" ) {
-//             
-//             $callback = function () use ($repo, $package) {
-//                 
-//                 $bitrix_dir = preg_match("/(local)/", $this->path) ? "local" : "bitrix";
-//                 $document_root = realpath(explode("/" . $bitrix_dir . "/", $this->path)[0]);
-//                 
-//                 $module_id = str_replace(["modules", "/"], "", explode("/" . $bitrix_dir, $this->path)[1]);
-//                 $module_path = $document_root . "/" . $bitrix_dir . "/modules/" . $module_id . "/install/settings.php";
-// 
-//                 if ( file_exists($module_path) ) {
-//                     $this->initBitrix($document_root);
-//                     
-//                     $debug = [
-//                         "id" => $module_id,
-//                         "path" => $module_path
-//                     ];
-//                     $test = false;
-//                     if ( $test ) {
-//                         
-//                     }
-//                     // \Bitrix\Main\Diag\Debug::writeToFile($debug, date('dmY H:i:s')."  ", "__Installer.php__log.txt");
-//                     if (!\CModule::IncludeModule($module_id)) {
-//                         $module = $this->getModule($package, $module_path, $module_id);
-//                         $module->DoInstall();
-//                         die();
-//                     }
-//                 } else {
-//                     throw new \Exception('Module path not defined');
-//                 }
-//             };
-//             
-//             // Composer v2 might return a promise here
-//             if ($promise instanceof PromiseInterface) {
-//                 $promise->then($callback);
-//                 return true;
-//             }
-//             
-//             $callback();
-//         }
-//     }
-    
-    protected function initBitrix($document_root)
+    public function install(InstalledRepositoryInterface $repo, PackageInterface $package)
     {
-        $_SERVER['DOCUMENT_ROOT'] = $document_root;
-        define('STOP_STATISTICS', true);
-        define("NO_KEEP_STATISTIC", "Y");
-        define("NO_AGENT_STATISTIC", "Y");
-        define("NOT_CHECK_PERMISSIONS", true);
-        require_once($_SERVER['DOCUMENT_ROOT'].'/bitrix/modules/main/include/prolog_before.php');
-        $GLOBALS['APPLICATION']->RestartBuffer();
+    
+        $promise = parent::install($repo, $package);
+            
+        if ( $this->frameworkType == "bitrix" ) {
+            
+            $callback = function () use ($repo, $package) {
+                
+                $bitrix_dir = preg_match("/(local)/", $this->path) ? "local" : "bitrix";
+                $document_root = realpath(explode("/" . $bitrix_dir . "/", $this->path)[0]);
+                
+                $module_id = str_replace(["modules", "/"], "", explode("/" . $bitrix_dir, $this->path)[1]);
+                $module_path = $document_root . "/" . $bitrix_dir . "/modules/" . $module_id;
+                $install_path = $module_path . "/install/settings.php"
+
+                if ( file_exists($module_path) ) {
+                    // $this->initBitrix($document_root);
+                    
+                    $git = $module_path . "/.git";
+                    $cjson = $module_path . "/composer.json";
+                    
+                    $this->removeDir($git);
+                    unlink($cjson);
+                } else {
+                    throw new \Exception('Module path not defined');
+                }
+            };
+            
+            // Composer v2 might return a promise here
+            if ($promise instanceof PromiseInterface) {
+                return $promise->then($callback);
+            }
+            
+            $callback();
+        }
     }
     
-    protected function getModule(PackageInterface $package, $module_path, $module_id)
+    protected function removeDir($dir)
     {
-        require_once $module_path;
-        $class = $module_id;
-        if (!class_exists($class)) {
-            throw new \Exception("Class $class does not exist");
+        if ($objs = glob($dir . '/*')) {
+            foreach($objs as $obj) {
+                is_dir($obj) ? $this->removeDir($obj) : unlink($obj);
+            }
         }
-        $module = new $class();
-        return $module;
+        rmdir($dir);
     }
 
     public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package)
