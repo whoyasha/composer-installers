@@ -97,8 +97,13 @@ class Installer extends LibraryInstaller
                         $this->filesystem->unlink($composer_json);
                         
                     if ( isset($module["libs"]) && count($module["libs"]) > 0 )
-                        foreach ( $module["libs"] as $lib )
+                        foreach ( $module["libs"] as $lib ) {
+                            
+                            if ( $lib == "utils" )
+                                continue;
+                                
                             $this->addLibsStruct($lib, $module);
+                        }
                             
                     if ( isset($module["lang_files"]) && is_array($module["lang_files"]) && count($module["lang_files"]) > 0 )
                         $this->addModuleLangFiles($module["lang_files"]);
@@ -251,7 +256,6 @@ class Installer extends LibraryInstaller
             /** @var BaseInstaller $framework */
             
             $pkg = new Package('dummy/pkg', '1.0.0.0', '1.0.0');
-            // $pkg->setType("bitrix-d7-module");
             
             $framework = new $frameworkClass($pkg, $this->composer, $this->getIO());
             $locations = array_keys($framework->getLocations($frameworkType));
