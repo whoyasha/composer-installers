@@ -12,8 +12,6 @@ use React\Promise\PromiseInterface;
 /**
  * Installer for Bitrix Framework. Supported types of extensions:
  * - `bitrix-d7-module` — copy the module to directory `bitrix/modules/<vendor>.<name>`.
- * - `bitrix-d7-component` — copy the component to directory `bitrix/components/<vendor>/<name>`.
- * - `bitrix-d7-template` — copy the template to directory `bitrix/templates/<vendor>_<name>`.
  *
  * You can set custom path to directory with Bitrix kernel in `composer.json`:
  *
