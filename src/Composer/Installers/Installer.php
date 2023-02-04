@@ -38,7 +38,6 @@ class Installer extends LibraryInstaller
         ?Filesystem $filesystem = null,
         ?BinaryInstaller $binaryInstaller = null
     ) {
-        $type = 'bitrix-d7-module';
         parent::__construct($io, $composer, $type, $filesystem, $binaryInstaller);
         $this->removeDisabledInstallers();
     }
@@ -53,9 +52,7 @@ class Installer extends LibraryInstaller
      */
     public function getInstallPath(PackageInterface $package)
     {
-        // $package->setType("bitrix-d7-module");
         $type = $package->getType();
-        // $type = "bitrix-d7-module";
         
         file_put_contents("/home/bitrix/composer.txt", $type);
         $this->frameworkType = $this->findFrameworkType($type);
