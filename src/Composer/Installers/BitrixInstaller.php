@@ -86,6 +86,8 @@ class BitrixInstaller extends BaseInstaller
 				if ( is_null($vars['name']) ) {
 					throw new \Exception('Current item not defined');
 				}
+			} elseif (!empty($extra['installer-name'])) {
+				$vars['name'] = $extra['installer-name'];
 			}
 		}
 
@@ -119,10 +121,6 @@ class BitrixInstaller extends BaseInstaller
 	protected function checkDuplicates(string $path, array $vars = array()): void
 	{
 		$packageType = substr($vars['type'], strlen('bitrix') + 1);
-		// $localDir = explode('/', $vars['bitrix_dir']);
-		// array_pop($localDir);
-		// $localDir[] = 'local';
-		// $localDir = implode('/', $localDir);
 
 		$oldPath = str_replace(
 			array('{$bitrix_dir}', '{$vendor}', '{$name}'),
